@@ -72,6 +72,7 @@ LEDs 36-38: status 0xAF, data2 bits 0-2.
 
 from pygame import pypm
 import time
+import threading
 
 NUM_LEDS = 38
 
@@ -105,8 +106,7 @@ def print_devices(InOrOut=None):
 class VMeter(object):
     """Class used to communicate with a VMeter.
 
-    NOTE: this class currently assumes only one VMeter is connected at a time,
-    specifically in the connect*() functions
+    NOTE: this class may not behave correctly if more than one VMeter is connected.
     """
     _in = None
     _out = None
@@ -115,6 +115,11 @@ class VMeter(object):
         pypm.Initialize()
         
         self.connect(input_device, output_device)
+
+        self.handlers = {}
+
+        self.reader = IntervalThread(self.dispatch, interval=.001)
+        self.reader.start()
 
     #
     # CONNECTION
@@ -125,6 +130,11 @@ class VMeter(object):
         self._out = self.connectOutput(device=output_device)
 
     def connectInput(self, device=None):
+        """
+        Connect input to receive data from VMeter.
+        If no device number is specified, attempts to connect
+        to the first unopened input device with "VMeter" in the name.
+        """
         if device is None:
             a = [i for (i, (_, name, inp, outp, opened))
                 in enumerate(get_devices())
@@ -137,6 +147,11 @@ class VMeter(object):
         return pypm.Input(device) 
 
     def connectOutput(self, device=None):
+        """
+        Connect output to send data to VMeter.
+        If no device number is specified, attempts to connect
+        to the first unopened output device with "VMeter" in the name.
+        """
         if device is None:
             a = [i for (i, (_, name, inp, outp, opened))
                 in enumerate(get_devices())
@@ -350,7 +365,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 110, value)
 
-    def set_LED_brightness(self, value):
+    def set_brightness(self, value):
         """
         Changes brightness of LEDs.
 
@@ -429,6 +444,32 @@ class VMeter(object):
         return None
 
     #
+    # EVENTING
+    #
+
+    def dispatch(self):
+        midi_data = self.read()
+
+        if midi_data is not None:
+            if midi_data[0] == CONTROL:
+                self.handle(midi_data[1], int(midi_data[2]))
+
+    def register(self, ctrl, function):
+        try:
+            control = self.handlers[ctrl]
+        except KeyError:
+            control = self.handlers[ctrl] = []
+
+        control.append(function)
+
+    def handle(self, ctrl, data):
+        print ctrl, data
+        
+        if ctrl in self.handlers:
+            for f in self.handlers[ctrl]:
+                f(data)
+
+    #
     # MACROS
     #
 
@@ -468,4 +509,19 @@ class VMeter(object):
             self.send_array(leds)
             time.sleep(delay)
 
+class IntervalThread(threading.Thread):
+    def __init__(self, function, interval, name="Interval"):
+        threading.Thread.__init__(self)
+        self.name = name
+        self.setDaemon(True)
+        self.killed = False
+        self.function = function
+        self.interval = interval
 
+    def run(self):
+        while not self.killed:
+            time.sleep(self.interval)
+            self.function()
+            
+    def stop(self):
+        self.killed = True
