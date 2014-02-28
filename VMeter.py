@@ -34,7 +34,8 @@ Pitch Wheel output without snapping back to center.
 
 Noteout:
 When touched, NoteOn messages sent via default pitch 64 and velocity 100 (changeable).
-Disabled by default. NoteOff message sent on release.
+Disabled by default.
+NoteOff message sent on release.
 Both the pitch and velocity can also be mapped to the position of touch,
 see Noteout Pitch and Velocity modes below.
 
@@ -81,6 +82,8 @@ _INPUT, _OUTPUT, _BOTH = range(3)
 
 CONTROL = 0xB0
 
+ON_OFF = 17
+PRESSURE = 18
 TOUCH_POS = 20
 
 def get_devices():
@@ -179,6 +182,25 @@ class VMeter(object):
     # SETTINGS
     #
 
+    def set_output_on_off(self, which):
+        """
+        When enabled, VMeter will send 127 via ctrl #17 when touched, 0 when released.
+        """
+        self.send_config(120 if which else 119)
+
+    def set_output_touch_position(self, which):
+        """
+        When enabled, VMeter will output touch position.
+        Disabling this is useful when setting up mappings.
+        """
+        self.send_config(124 if which else 123)
+
+    def set_output_pressure(self, which):
+        """
+        When enabled, VMeter will output pressure intensity.
+        """
+        self.send_config(122 if which else 121)
+
     def set_upside_down_mode(self, which):
         """
         When enabled, VMeter will draw LED column from the top rather than the bottom.
@@ -187,15 +209,6 @@ class VMeter(object):
         """
         self.send_config(125 if which else 126)
 
-    def recalibrate_touch_sensor(self):
-        """
-        Issues a recalibration, which normally shouldn’t be necessary,
-        but might if the environment changes too much, or it gets in an erroneous state.
-        For instance, moving it next to a large metal object can sometimes cause this.
-        In general, the VMeter is contantly recalibrating itself to the environment,
-        and this shouldn't be necessary.
-        """
-        self.send_config(112)
 
     def set_LEDs_ignore_touch(self, which):
         """
@@ -206,24 +219,15 @@ class VMeter(object):
         """
         self.send_config(107 if which else 106)
 
-    def set_on_off_output(self, which):
+    def recalibrate_touch_sensor(self):
         """
-        When enabled, VMeter will send 127 via ctrl #17 when touched, 0 when released.
+        Issues a recalibration, which normally shouldn’t be necessary,
+        but might if the environment changes too much, or it gets in an erroneous state.
+        For instance, moving it next to a large metal object can sometimes cause this.
+        In general, the VMeter is contantly recalibrating itself to the environment,
+        and this shouldn't be necessary.
         """
-        self.send_config(120 if which else 119)
-
-    def set_touch_position_output(self, which):
-        """
-        When enabled, VMeter will output touch position.
-        Disabling this is useful when setting up mappings.
-        """
-        self.send_config(124 if which else 123)
-
-    def set_pressure_output(self, which):
-        """
-        When enabled, VMeter will output pressure intensity.
-        """
-        self.send_config(122 if which else 121)
+        self.send_config(112)
 
     def set_note_on_off_messages(self, which):
         """
@@ -246,13 +250,6 @@ class VMeter(object):
         """
         self.send_config(105 if which else 104)
 
-    def read_current_settings(self):
-        """
-        Reads VMeter's current settings.
-        Used to update the configuration utility interface.
-        """
-        self.send_config(113)
-
     def set_noteout_velocity_mode(self, which):
         """
         When enabled, velocity of note-outs is based on position.
@@ -273,30 +270,55 @@ class VMeter(object):
         """
         self.send_config(103)
 
+    def read_settings(self):
+        """
+        Reads VMeter's current settings.
+        Used to update the configuration utility interface.
+
+        0 : [85]
+        1 : 8 = output_pressure, 4 = output_on_off, 2 = output_touch_position, 1 = upside-down mode
+        2 : 32 = cross-fader mode, 16 = noteout pitch mode, 8 = noteout velocity mode, 4 = LEDs ignore touch, 2 = note on/off messages, 1 = pitch wheel mode
+        3 : output position ctrl #
+        4 : output on/off ctrl #
+        5 : output pressure ctrl #
+        6 : input light ctrl #
+        7 : input brightness ctrl #
+        8 : default pitch
+        9 : default velocity
+        10: brightness
+        11: MIDI channel (-1)
+        12: [0]
+        13: [5]
+        14: sensitivity (default 64 (0 in UI))
+        15: pitch wheel mode : return-to-center speed
+
+        """
+        self.send_config(113)
+
     def store_settings(self):
         """
         Stores settings so they will be retained after power is removed.
         Saves:
-        - upside-down mode
-        - enable touch position output
-        - enable pressure output
-        - enable on/off output
-        - midi channel
-        - position output controller #
-        - on/off output controller #
-        - pressure output controller #
-        - light input controller #
-        - brightness input controller #
-        - enable note-on/off signals
-        - note pitch
-        - note pitch mode
-        - note velocity
-        - note velocity mode
-        - pitch wheel enable
-        - brightness
-        - LEDs ignore touch mode
-        - pitch wheel enable
-        - cross fade mode enable
+        -- upside-down mode
+        -- enable touch position output
+        -- enable pressure output
+        -- enable on/off output
+        -- midi channel
+        -- position output controller #
+        -- on/off output controller #
+        -- pressure output controller #
+        -- light input controller #
+        -- brightness input controller #
+        -- enable note-on/off signals
+        -- note pitch
+        -- note pitch mode
+        -- note velocity
+        -- note velocity mode
+        -- pitch wheel enable
+        -- brightness
+        -- LEDs ignore touch mode
+        -- pitch wheel enable
+        -- cross fade mode enable
         """
         self.send_config(118)
 
@@ -309,7 +331,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 117, value)
 
-    def set_position_output_ctrl_num(self, value):
+    def set_output_position_ctrl(self, value):
         """
         Changes the controller number over which touch output messages are sent.
 
@@ -317,7 +339,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 116, value)
 
-    def set_on_off_output_ctrl_num(self, value):
+    def set_output_on_off_ctrl(self, value):
         """
         Changes the controller number over which on/off output messages are sent.
 
@@ -325,7 +347,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 115, value)
 
-    def set_pressure_output_ctrl_num(self, value):
+    def set_output_pressure_ctrl(self, value):
         """
         Changes the controller number over which pressure output messages are sent.
 
@@ -333,7 +355,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 114, value)
 
-    def set_light_input_ctrl_num(self, value):
+    def set_input_light_ctrl(self, value):
         """
         Changes the controller number over which light input messages are sent.
 
@@ -341,7 +363,7 @@ class VMeter(object):
         """
         self._out.WriteShort(CONTROL, 113, value)
 
-    def set_brightness_input_ctrl_num(self, value):
+    def set_input_brightness_ctrl(self, value):
         """
         Changes the controller number over which brightness input messages are sent.
 
@@ -451,6 +473,8 @@ class VMeter(object):
         midi_data = self.read()
 
         if midi_data is not None:
+            print midi_data
+
             if midi_data[0] == CONTROL:
                 self.handle(midi_data[1], int(midi_data[2]))
 
@@ -463,8 +487,6 @@ class VMeter(object):
         control.append(function)
 
     def handle(self, ctrl, data):
-        print ctrl, data
-        
         if ctrl in self.handlers:
             for f in self.handlers[ctrl]:
                 f(data)
