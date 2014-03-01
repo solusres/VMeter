@@ -81,10 +81,18 @@ NUM_LEDS = 38
 _INPUT, _OUTPUT, _BOTH = range(3)
 
 CONTROL = 0xB0
+CTRL_ECHO = 118
+CTRL_CONFIG = 119
 
-ON_OFF = 17
-PRESSURE = 18
-TOUCH_POS = 20
+class Event:
+    TOUCH = 1
+    PRESSURE = 2
+    TOUCH_START = 3
+    TOUCH_END = 4
+
+class Touch:
+    MAX = 127
+    MIN = 0
 
 def get_devices():
     for i in range(pypm.CountDevices()):
@@ -109,15 +117,23 @@ def print_devices(InOrOut=None):
 class VMeter(object):
     """Class used to communicate with a VMeter.
 
-    NOTE: this class may not behave correctly if more than one VMeter is connected.
+    NOTE: this class has not been tested with more than one VMeter connected.
     """
-    _in = None
-    _out = None
 
     def __init__(self, input_device=None, output_device=None):
         pypm.Initialize()
         
+        self._in = None
+        self._out = None
         self.connect(input_device, output_device)
+    
+        # controller mappings
+        # TODO: update from read_settings()
+        self.ctrl_out_on_off = 17
+        self.ctrl_out_pressure = 18
+        self.ctrl_out_touch_pos = 20
+        self.ctrl_in_light = 20
+        self.ctrl_in_brightness = 21
 
         self.handlers = {}
 
@@ -329,7 +345,7 @@ class VMeter(object):
 
         value 1-16
         """
-        self._out.WriteShort(CONTROL, 117, value)
+        self.send_controller(117, value)
 
     def set_output_position_ctrl(self, value):
         """
@@ -337,7 +353,7 @@ class VMeter(object):
 
         value 0-100
         """
-        self._out.WriteShort(CONTROL, 116, value)
+        self.send_controller(116, value)
 
     def set_output_on_off_ctrl(self, value):
         """
@@ -345,7 +361,7 @@ class VMeter(object):
 
         value 0-100
         """
-        self._out.WriteShort(CONTROL, 115, value)
+        self.send_controller(115, value)
 
     def set_output_pressure_ctrl(self, value):
         """
@@ -353,7 +369,7 @@ class VMeter(object):
 
         value 0-100
         """
-        self._out.WriteShort(CONTROL, 114, value)
+        self.send_controller(114, value)
 
     def set_input_light_ctrl(self, value):
         """
@@ -361,7 +377,7 @@ class VMeter(object):
 
         value 0-100
         """
-        self._out.WriteShort(CONTROL, 113, value)
+        self.send_controller(113, value)
 
     def set_input_brightness_ctrl(self, value):
         """
@@ -369,7 +385,7 @@ class VMeter(object):
 
         value 0-100
         """
-        self._out.WriteShort(CONTROL, 112, value)
+        self.send_controller(112, value)
 
     def set_noteout_number(self, value):
         """
@@ -377,7 +393,7 @@ class VMeter(object):
 
         value 0-127
         """
-        self._out.WriteShort(CONTROL, 111, value)
+        self.send_controller(111, value)
 
     def set_noteout_velocity(self, value):
         """
@@ -385,7 +401,7 @@ class VMeter(object):
 
         value 0-127
         """
-        self._out.WriteShort(CONTROL, 110, value)
+        self.send_controller(110, value)
 
     def set_brightness(self, value):
         """
@@ -394,7 +410,7 @@ class VMeter(object):
         value 0-16 (0 = off)
         """
         vals = [0, 7, 15, 23, 31, 39, 47, 55, 63, 71, 79, 87, 95, 103, 111, 119, 127]
-        self._out.WriteShort(CONTROL, 21, vals[value])
+        self.send_controller(21, vals[value])
 
     #
     # SENDING DATA
@@ -405,14 +421,17 @@ class VMeter(object):
         Sends value to be echoed back.
         Works only on channel 1.
         """
-        self._out.WriteShort(CONTROL, 118, value)
+        self.send_controller(CTRL_ECHO, value)
 
     def send_config(self, value):
         """
         Sends value over Ctrl #119.
         Helper function for setting config values.
         """
-        self._out.WriteShort(CONTROL, 119, value)
+        self.send_controller(CTRL_CONFIG, value)
+
+    def send_controller(self, ctrl, value):
+        self._out.WriteShort(CONTROL, ctrl, value)
 
     def send_array(self, array):
         """
@@ -440,7 +459,7 @@ class VMeter(object):
         """
         Send a column of height from 0 to 127.
         """
-        self._out.WriteShort(CONTROL,20,height)
+        self._out.WriteShort(CONTROL, self.ctrl_in_light, height)
 
     def clear(self):
         self.send_column(0)
@@ -469,27 +488,80 @@ class VMeter(object):
     # EVENTING
     #
 
+    def register(self, eventType, handler):
+        try:
+            handlers = self.handlers[eventType]
+        except KeyError:
+            handlers = self.handlers[eventType] = []
+
+        handlers.append(handler)
+
     def dispatch(self):
         midi_data = self.read()
 
         if midi_data is not None:
-            print midi_data
+            # print "$ ", midi_data
 
             if midi_data[0] == CONTROL:
                 self.handle(midi_data[1], int(midi_data[2]))
 
-    def register(self, ctrl, function):
-        try:
-            control = self.handlers[ctrl]
-        except KeyError:
-            control = self.handlers[ctrl] = []
-
-        control.append(function)
-
     def handle(self, ctrl, data):
-        if ctrl in self.handlers:
-            for f in self.handlers[ctrl]:
-                f(data)
+        handlers = None
+
+        try:
+            # There's probably a more Pythonic way to do this, right?
+            if ctrl is self.ctrl_out_touch_pos:
+                handlers = self.handlers[Event.TOUCH]
+            elif ctrl is self.ctrl_out_pressure:
+                handlers = self.handlers[Event.PRESSURE]
+            elif ctrl is self.ctrl_out_on_off:
+                no_arg = True
+                if data is 0:
+                    handlers = self.handlers[Event.TOUCH_END]
+                else:
+                    handlers = self.handlers[Event.TOUCH_START]
+
+            if handlers is not None:
+                if no_arg:                
+                    for f in handlers:
+                        f()
+                else:
+                    for f in handlers:
+                        f(data)
+        except KeyError:
+            pass
+
+    def on_touch(self, handler):
+        """
+        Register a handler for VMeter touch positional input.
+
+        Handler will be called with one argument, touch_position (0-127).
+        """
+        self.register(Event.TOUCH, handler)
+
+    def on_pressure(self, handler):
+        """
+        Register a handler for VMeter pressure input.
+
+        Handler will be called with one argument, pressure_strength (0-127).
+        """
+        self.register(Event.PRESSURE, handler)
+
+    def on_touch_start(self, handler):
+        """
+        Register a handler for the start of VMeter touch input.
+
+        Handler will be called with no arguments.
+        """
+        self.register(Event.TOUCH_START, handler)
+
+    def on_touch_end(self, handler):
+        """
+        Register a handler for the end of VMeter touch input.
+
+        Handler will be called with no arguments.
+        """
+        self.register(Event.TOUCH_END, handler)
 
     #
     # MACROS
