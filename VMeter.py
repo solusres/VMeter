@@ -507,6 +507,7 @@ class VMeter(object):
 
     def handle(self, ctrl, data):
         handlers = None
+	no_arg = False
 
         try:
             # There's probably a more Pythonic way to do this, right?

@@ -31,13 +31,10 @@ class ManualTests(unittest.TestCase):
 
 class AutomatedTests(unittest.TestCase):
     def setUp(self):
-        pass
-        #self.v = VMeter.VMeter()
+        self.v = VMeter.VMeter()
 
     def tearDown(self):
-        pass
-        #self.v.close()
-        #self.v = None
+        self.v.close()
 
     def test_read_settings(self):                    
         """verify output of read_settings"""
