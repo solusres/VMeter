@@ -8,13 +8,16 @@ class ManualTests(unittest.TestCase):
         Empty input (single return) succeeds.
         Non-empty input fails.
         """
-        print 78*"-"
+        print 
+        print "??\n??"
         print assertion
-        print
-        result = raw_input(" ? ")
+        
+        result = raw_input(">>>")
 
         if result:
             self.fail("!!! This was not so:\n%s" % assertion)
+        else:
+            print "OK"
 
     def test_known_state(self):                          
         """.boilerplate."""
@@ -29,11 +32,13 @@ class ManualTests(unittest.TestCase):
 
 class AutomatedTests(unittest.TestCase):
     def setUp(self):
-        self.v = VMeter.VMeter()
+        pass
+        #self.v = VMeter.VMeter()
 
     def tearDown(self):
-        self.v.close()
-        self.v = None
+        pass
+        #self.v.close()
+        #self.v = None
 
     def test_read_settings(self):                    
         """verify output of read_settings"""
