@@ -9,10 +9,9 @@ class ManualTests(unittest.TestCase):
         Non-empty input fails.
         """
         print 
-        print "??\n??"
         print assertion
         
-        result = raw_input(">>>")
+        result = raw_input(">> ")
 
         if result:
             self.fail("!!! This was not so:\n%s" % assertion)
